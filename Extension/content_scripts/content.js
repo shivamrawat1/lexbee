@@ -1,297 +1,270 @@
-let currentPopup = null;
-let isLoading = false;
+// Inject CSS for popup styling
+const style = document.createElement("style");
+style.textContent = `
+  .word-popup {
+    position: absolute;
+    background: white;
+    border: 2px solid #007bff;
+    border-radius: 8px;
+    padding: 16px;
+    max-width: 400px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
 
-// Sanitize HTML to prevent XSS
-function sanitizeHTML(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
+  .word-popup .word-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #007bff;
+    margin: 0 0 8px 0;
+  }
 
-// Fetch word definition from API
-async function fetchDefinition(word) {
-    try {
-        const response = await fetch(`https://meanings.onrender.com/api/${encodeURIComponent(word)}`);
+  .word-popup .part-of-speech {
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+    margin: 0 0 10px 0;
+  }
 
-        if (!response.ok) {
-            throw new Error(`API request failed: ${response.status}`);
-        }
+  .word-popup .definition {
+    color: #000;
+    margin: 0 0 12px 0;
+  }
 
-        const data = await response.json();
+  .word-popup .example-uses {
+    margin-top: 12px;
+  }
 
-        if (!data || !Array.isArray(data) || data.length === 0) {
-            throw new Error('No definition found');
-        }
+  .word-popup .example-item {
+    display: flex;
+    align-items: stretch;
+    margin-bottom: 8px;
+  }
 
-        const wordData = data[0];
+  .word-popup .example-bar {
+    width: 3px;
+    background-color: #007bff;
+    margin-right: 10px;
+    flex-shrink: 0;
+    border-radius: 0;
+  }
 
-        if (!wordData.MEANINGS || !Array.isArray(wordData.MEANINGS) || wordData.MEANINGS.length === 0) {
-            throw new Error('No meanings available for this word');
-        }
+  .word-popup .example-text {
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+    flex: 1;
+    line-height: 1.5;
+  }
 
-        return wordData.MEANINGS[0]; // Return first definition
-    } catch (error) {
-        console.error('Error fetching definition:', error);
-        throw error;
-    }
-}
+  .word-popup .error-message {
+    color: #dc3545;
+    font-size: 14px;
+    padding: 8px;
+  }
+`;
+document.head.appendChild(style);
 
-// Hide popup
-function hidePopup() {
-    if (currentPopup) {
-        currentPopup.remove();
-        currentPopup = null;
-
-        // Remove backdrop overlay if present
-        var backdrop = document.getElementById('lexbee-backdrop');
-        if (backdrop) {
-            backdrop.remove();
-        }
-    }
-    isLoading = false;
-}
-
-// Handle word selection
-async function handleWordSelection() {
-    // Don't trigger if popup is already open or loading
-    if (currentPopup || isLoading) {
-        return;
-    }
-
+// Double click handler
+document.addEventListener("dblclick", () => {
     const selection = window.getSelection();
-    const selectedText = selection.toString().trim();
+    const word = selection.toString().trim();
 
-    // Only process single words (no spaces, reasonable length)
-    if (!selectedText || selectedText.includes(' ') || selectedText.length > 50) {
-        return;
-    }
-
-    // Clean the word (remove punctuation)
-    const word = selectedText.replace(/[^\w]/g, '').toLowerCase();
-
-    if (word.length < 2) {
-        return;
-    }
-
-    // Remove existing popup
-    hidePopup();
-
-    // Create and show popup immediately with loading state
-    showWordPopup(word, selection);
-}
-
-// Show word popup with definition
-async function showWordPopup(word, selection) {
-    // Create popup for selected word
-    const popup = document.createElement('div');
-    popup.id = 'lexbee-popup';
-    popup.style.cssText = `
-        position: absolute;
-        background: white;
-        border: 2px solid #4a90e2;
-        border-radius: 8px;
-        padding: 12px 16px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 14px;
-        line-height: 1.4;
-        max-width: 300px;
-        z-index: 999999;
-        pointer-events: auto;
-        color: #333;
-        word-wrap: break-word;
-    `;
+    if (!word) return;
 
     // Show loading state
-    popup.innerHTML = '<div style="position: relative;"><button id="lexbee-close-btn" style="position: absolute; top: -8px; right: -8px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer;">×</button><div>Loading definition for "' + sanitizeHTML(word) + '"...</div></div>';
+    showLoadingPopup(selection);
 
-    // Add invisible backdrop to detect outside clicks
-    var backdrop = document.createElement('div');
-    backdrop.id = 'lexbee-backdrop';
-    backdrop.style.cssText = 'position:fixed;inset:0;z-index:999998;background:transparent;pointer-events:auto;cursor:default;';
+    // Send message to background script
+    chrome.runtime.sendMessage(
+        { action: "lookupWord", word },
+        (response) => {
+            removeExistingPopup();
 
-    // Add to DOM (backdrop first, then popup)
-    document.body.appendChild(backdrop);
-    document.body.appendChild(popup);
-    currentPopup = popup;
-    isLoading = true;
+            if (chrome.runtime.lastError) {
+                showErrorPopup(selection, "Failed to communicate with extension");
+                return;
+            }
 
-    // Position popup with dynamic adjustments to prevent clipping
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    const popupRect = popup.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const margin = 10; // Buffer from screen edges
+            if (!response) {
+                showErrorPopup(selection, "No response from server");
+                return;
+            }
 
-    // Default position: above the selection
-    let left = rect.left + window.scrollX;
-    let top = rect.top + window.scrollY - popupRect.height - 10; // 10px gap above selection
+            if (response.success) {
+                showPopup(response.data, selection);
+            } else {
+                showErrorPopup(selection, response.error || "Failed to fetch definition");
+            }
+        }
+    );
+});
 
-    // Adjust left to prevent clipping on left/right edges
-    if (left + popupRect.width + margin > viewportWidth + window.scrollX) {
-        left = viewportWidth + window.scrollX - popupRect.width - margin;
+// Click outside popup to close
+document.addEventListener("click", (e) => {
+    const popup = document.querySelector(".word-popup");
+    if (popup && !popup.contains(e.target)) {
+        removeExistingPopup();
     }
-    if (left < window.scrollX + margin) {
-        left = window.scrollX + margin;
+});
+
+// Message listener (kept for backward compatibility)
+chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === "showDefinition") {
+        const selection = window.getSelection();
+        showPopup(
+            {
+                word: message.word,
+                partOfSpeech: message.partOfSpeech || "unknown",
+                text: message.definition,
+                exampleUses: message.exampleUses || []
+            },
+            selection
+        );
     }
+});
 
-    // Adjust top to prevent clipping on top/bottom edges
-    if (top < window.scrollY + margin) {
-        // If above selection clips, place below selection
-        top = rect.bottom + window.scrollY + 10; // 10px gap below selection
-    }
-    if (top + popupRect.height + margin > viewportHeight + window.scrollY) {
-        // If below clips, prioritize staying within viewport
-        top = viewportHeight + window.scrollY - popupRect.height - margin;
-    }
-
-    popup.style.left = `${left}px`;
-    popup.style.top = `${top}px`;
-
-    // Click outside via backdrop
-    backdrop.addEventListener('mousedown', function (e) {
-        console.log('Backdrop mousedown detected');
-        hidePopup();
-    });
-    backdrop.addEventListener('click', function (e) {
-        console.log('Backdrop click detected');
-        hidePopup();
-    });
-
-    // Add close button event listener
-    const closeBtn = popup.querySelector('#lexbee-close-btn');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            hidePopup();
-        });
-    }
-
-    // Fetch definition from API with timeout
-    const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('API request timeout')), 10000); // 10 second timeout
-    });
+function showLoadingPopup(selection) {
+    removeExistingPopup();
 
     try {
-        // Fetch definition
-        console.log('Fetching definition for:', word);
-        const definition = await Promise.race([
-            fetchDefinition(word),
-            timeoutPromise
-        ]);
-        console.log('Definition received:', definition);
-
-        // Update popup with definition
-        if (popup && document.body.contains(popup)) {
-            var exampleHtml = '';
-            if (definition.exampleSentence && definition.exampleSentence.length > 0) {
-                exampleHtml = '<div style="font-style: italic; color: #666; font-size: 12px; border-left: 3px solid #4a90e2; padding-left: 8px;">"' + sanitizeHTML(definition.exampleSentence[0]) + '"</div>';
-            }
-
-            popup.innerHTML = '<div style="position: relative;"><button id="lexbee-close-btn" style="position: absolute; top: -8px; right: -8px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer;">×</button><div style="margin-bottom: 8px;"><strong style="color: #4a90e2; font-size: 16px;">' + sanitizeHTML(word) + '</strong></div><div style="margin-bottom: 4px;"><em style="color: #666; font-size: 12px;">' + sanitizeHTML(definition.partsOfSpeech) + '</em></div><div style="margin-bottom: 8px;">' + sanitizeHTML(definition.definition) + '</div>' + exampleHtml + '</div>';
-
-            // Recompute position after content update, as popup size may change
-            const updatedPopupRect = popup.getBoundingClientRect();
-            let updatedLeft = left;
-            let updatedTop = top;
-
-            // Adjust left for updated size
-            if (updatedLeft + updatedPopupRect.width + margin > viewportWidth + window.scrollX) {
-                updatedLeft = viewportWidth + window.scrollX - updatedPopupRect.width - margin;
-            }
-            if (updatedLeft < window.scrollX + margin) {
-                updatedLeft = window.scrollX + margin;
-            }
-
-            // Adjust top for updated size
-            if (updatedTop < window.scrollY + margin) {
-                updatedTop = rect.bottom + window.scrollY + 10;
-            }
-            if (updatedTop + updatedPopupRect.height + margin > viewportHeight + window.scrollY) {
-                updatedTop = viewportHeight + window.scrollY - updatedPopupRect.height - margin;
-            }
-
-            popup.style.left = `${updatedLeft}px`;
-            popup.style.top = `${updatedTop}px`;
-
-            // Add close button event listener to updated popup
-            const closeBtn = popup.querySelector('#lexbee-close-btn');
-            if (closeBtn) {
-                closeBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    hidePopup();
-                });
-            }
-
-            // Definition displayed successfully
-            isLoading = false;
-        } else {
-            // Popup was removed before definition could be shown
-            isLoading = false;
-        }
+        const range = selection.getRangeAt(0).getBoundingClientRect();
+        const popup = document.createElement("div");
+        popup.className = "word-popup";
+        popup.innerHTML = '<div style="padding: 8px;">Loading...</div>';
+        positionPopup(popup, range);
     } catch (error) {
-        console.error('Error fetching definition:', error);
-        console.log('Error message:', error.message);
-
-        if (popup && document.body.contains(popup)) {
-            if (error.message.includes('No meanings available')) {
-                popup.innerHTML = '<div style="position: relative;"><button id="lexbee-close-btn" style="position: absolute; top: -8px; right: -8px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer;">×</button><div style="margin-bottom: 8px;"><strong style="color: #4a90e2; font-size: 16px;">' + sanitizeHTML(word) + '</strong></div><div style="color: #666; font-style: italic;">No definition available for this word.</div></div>';
-            } else {
-                popup.innerHTML = '<div style="position: relative;"><button id="lexbee-close-btn" style="position: absolute; top: -8px; right: -8px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; cursor: pointer;">×</button><div style="color: #e74c3c;"><strong>Error:</strong> ' + sanitizeHTML(error.message) + '</div></div>';
-            }
-
-            // Recompute position after error content update
-            const updatedPopupRect = popup.getBoundingClientRect();
-            let updatedLeft = left;
-            let updatedTop = top;
-
-            // Adjust left for updated size
-            if (updatedLeft + updatedPopupRect.width + margin > viewportWidth + window.scrollX) {
-                updatedLeft = viewportWidth + window.scrollX - updatedPopupRect.width - margin;
-            }
-            if (updatedLeft < window.scrollX + margin) {
-                updatedLeft = window.scrollX + margin;
-            }
-
-            // Adjust top for updated size
-            if (updatedTop < window.scrollY + margin) {
-                updatedTop = rect.bottom + window.scrollY + 10;
-            }
-            if (updatedTop + updatedPopupRect.height + margin > viewportHeight + window.scrollY) {
-                updatedTop = viewportHeight + window.scrollY - updatedPopupRect.height - margin;
-            }
-
-            popup.style.left = `${updatedLeft}px`;
-            popup.style.top = `${updatedTop}px`;
-
-            // Add close button event listener to error popup
-            const closeBtn = popup.querySelector('#lexbee-close-btn');
-            if (closeBtn) {
-                closeBtn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    hidePopup();
-                });
-            }
-        }
-
-        isLoading = false;
+        console.error("Error showing loading popup:", error);
     }
 }
 
-// Event listeners
-document.addEventListener('mouseup', handleWordSelection);
-document.addEventListener('keyup', handleWordSelection);
+function showErrorPopup(selection, errorMessage) {
+    removeExistingPopup();
 
-// Escape key handler
-document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && currentPopup) {
-        hidePopup();
+    try {
+        let range;
+        if (selection && selection.rangeCount > 0) {
+            range = selection.getRangeAt(0).getBoundingClientRect();
+        } else {
+            // Fallback: position at center of viewport
+            range = {
+                bottom: window.innerHeight / 2,
+                left: window.innerWidth / 2,
+                top: window.innerHeight / 2 - 50
+            };
+        }
+
+        const popup = document.createElement("div");
+        popup.className = "word-popup";
+        popup.innerHTML = `
+      <div class="error-message">${escapeHtml(errorMessage)}</div>
+    `;
+        positionPopup(popup, range);
+    } catch (error) {
+        console.error("Error showing error popup:", error);
     }
-});
+}
+
+function showPopup(data, selection) {
+    removeExistingPopup();
+
+    try {
+        const range = selection.getRangeAt(0).getBoundingClientRect();
+
+        const popup = document.createElement("div");
+        popup.className = "word-popup";
+
+        // Build popup content
+        let html = `<div class="word-title">${escapeHtml(data.word)}</div>`;
+        html += `<div class="part-of-speech">${capitalizeFirst(data.partOfSpeech)}</div>`;
+        html += `<div class="definition">${escapeHtml(data.text)}</div>`;
+
+        // Add example uses if available
+        if (data.exampleUses && data.exampleUses.length > 0) {
+            html += '<div class="example-uses">';
+            data.exampleUses.forEach((example) => {
+                // Add quotation marks if not already present
+                let exampleText = example.trim();
+                // Check if text already starts with any type of quote (straight, curly, or smart quotes)
+                const hasQuote = /^[""\u201C\u201D\u2018\u2019]/.test(exampleText);
+                if (!hasQuote) {
+                    exampleText = `"${exampleText}"`;
+                }
+                html += `
+          <div class="example-item">
+            <div class="example-bar"></div>
+            <div class="example-text">${escapeHtml(exampleText)}</div>
+          </div>
+        `;
+            });
+            html += '</div>';
+        }
+
+        popup.innerHTML = html;
+        positionPopup(popup, range);
+    } catch (error) {
+        console.error("Error showing popup:", error);
+        showErrorPopup(selection, "Failed to display definition");
+    }
+}
+
+function positionPopup(popup, range) {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+
+    // Position below the selection by default
+    let top = range.bottom + scrollY + 5;
+    let left = range.left + scrollX;
+
+    // Add to DOM first to get accurate dimensions
+    popup.style.visibility = "hidden";
+    popup.style.position = "absolute";
+    popup.style.top = `${top}px`;
+    popup.style.left = `${left}px`;
+    document.body.appendChild(popup);
+
+    const popupRect = popup.getBoundingClientRect();
+
+    // Adjust if popup would go off screen
+    if (left + popupRect.width > viewportWidth + scrollX) {
+        left = viewportWidth + scrollX - popupRect.width - 10;
+    }
+
+    if (top + popupRect.height > viewportHeight + scrollY) {
+        // Position above if below doesn't fit
+        top = range.top + scrollY - popupRect.height - 5;
+        if (top < scrollY) {
+            top = scrollY + 10;
+        }
+    }
+
+    if (left < scrollX) {
+        left = scrollX + 10;
+    }
+
+    // Update position and make visible
+    popup.style.top = `${top}px`;
+    popup.style.left = `${left}px`;
+    popup.style.visibility = "visible";
+}
+
+function removeExistingPopup() {
+    const existing = document.querySelector(".word-popup");
+    if (existing) existing.remove();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function capitalizeFirst(str) {
+    if (!str) return "";
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
