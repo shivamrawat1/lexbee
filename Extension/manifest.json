@@ -18,6 +18,10 @@
     "host_permissions": [
         "https://meanings.onrender.com/*"
     ],
+    "background": {
+        "service_worker": "background/background.js",
+        "type": "module"
+    },
     "content_scripts": [
         {
             "js": [
