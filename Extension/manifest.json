@@ -10,7 +10,7 @@
         "128": "images/favicon-128.png"
     },
     "action": {
-        "default_popup": "instructions.html"
+        "default_popup": "/default_popup/instructions.html"
     },
     "permissions": [
         "activeTab"
