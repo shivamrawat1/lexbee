@@ -25,7 +25,7 @@ async function lookupWord(word) {
             throw new Error("Word cannot be empty");
         }
 
-        const apiUrl = `https://lexbee-production.up.railway.app/front/${cleanWord}`;
+        const apiUrl = `https://lexbee-production.up.railway.app/definition/${cleanWord}`;
 
         const response = await fetch(apiUrl);
 
@@ -35,12 +35,12 @@ async function lookupWord(word) {
 
         const data = await response.json();
 
-        // Validate response is an array
-        if (!Array.isArray(data)) {
+        // Validate response is an object
+        if (!data || typeof data !== 'object') {
             throw new Error("Invalid API response format");
         }
 
-        // Parse the response to extract the first valid definition
+        // Parse the response to match the expected format
         const definition = parseDefinition(data, cleanWord);
 
         return definition;
@@ -65,40 +65,27 @@ function cleanDefinitionText(text) {
     return text;
 }
 
-function parseDefinition(definitions, word) {
-    // Filter out entries with null text and find the first valid definition
-    // Also clean the text to remove XML tags
-    const validDefinitions = definitions
-        .filter(def => def.text && def.text.trim())
-        .map(def => ({
-            ...def,
-            text: cleanDefinitionText(def.text)
-        }))
-        .filter(def => def.text && def.text.trim()); // Filter again after cleaning
+function parseDefinition(data, word) {
+    // Map the new API response format to the expected format
+    // API returns: { word, partOfSpeech, definition, example }
+    // We need: { word, partOfSpeech, text, exampleUses }
 
-    if (validDefinitions.length === 0) {
-        // If no definition has text, return the first one anyway (might have other info)
-        if (definitions.length > 0) {
-            return {
-                word: definitions[0].word || word,
-                partOfSpeech: definitions[0].partOfSpeech || "unknown",
-                text: "No definition available",
-                exampleUses: []
-            };
-        }
-        throw new Error("No definitions found");
+    const definitionText = data.definition ? cleanDefinitionText(data.definition) : null;
+
+    if (!definitionText || !definitionText.trim()) {
+        throw new Error("No definition available");
     }
 
-    // Use the first valid definition (you can modify this to show multiple)
-    const def = validDefinitions[0];
+    // Convert single example string to array format expected by UI
+    const exampleUses = data.example && data.example.trim()
+        ? [data.example.trim()]
+        : [];
 
     return {
-        word: def.word || word,
-        partOfSpeech: def.partOfSpeech || "unknown",
-        text: def.text,
-        exampleUses: def.exampleUses && Array.isArray(def.exampleUses)
-            ? def.exampleUses.map(ex => ex.text).filter(text => text && text.trim())
-            : []
+        word: data.word || word,
+        partOfSpeech: data.partOfSpeech || "unknown",
+        text: definitionText,
+        exampleUses: exampleUses
     };
 }
 
