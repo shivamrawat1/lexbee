@@ -1,8 +1,17 @@
 from fastapi import FastAPI
-from .routers import wordnik
-
+from fastapi.middleware.cors import CORSMiddleware
+from .routers import wordnik, definition
 
 app = FastAPI()
+
+# Add CORS middleware to allow browser extension requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
@@ -11,3 +20,4 @@ async def health_check():
 
 
 app.include_router(wordnik.router)
+app.include_router(definition.router)
