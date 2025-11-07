@@ -18,6 +18,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function lookupWord(word) {
     try {
+        // Clean the word (remove extra spaces, convert to lowercase)
         const cleanWord = word.trim().toLowerCase();
 
         if (!cleanWord) {
@@ -34,10 +35,38 @@ async function lookupWord(word) {
 
         const data = await response.json();
 
-        return data;
+        // Validate response is an object
+        if (!data || typeof data !== 'object') {
+            throw new Error("Invalid API response format");
+        }
+
+        // Parse the response to match the expected format
+        const definition = parseDefinition(data, cleanWord);
+
+        return definition;
     } catch (error) {
         console.error("Error in lookupWord:", error);
         throw error;
     }
+}
+
+function parseDefinition(data, word) {
+
+    const definitionText = data.definition ? data.definition : null;
+
+    if (!definitionText || !definitionText.trim()) {
+        throw new Error("No definition available");
+    }
+
+    const exampleUses = data.example && data.example.trim()
+        ? [data.example.trim()]
+        : [];
+
+    return {
+        word: data.word || word,
+        partOfSpeech: data.partOfSpeech || "unknown",
+        text: definitionText,
+        exampleUses: exampleUses
+    };
 }
 
