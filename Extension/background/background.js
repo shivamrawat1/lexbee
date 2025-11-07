@@ -50,33 +50,14 @@ async function lookupWord(word) {
     }
 }
 
-function cleanDefinitionText(text) {
-    if (!text) return text;
-
-    // Extract content from <xref>...</xref> tags and replace the tag with just the content
-    text = text.replace(/<xref>(.*?)<\/xref>/gi, '$1');
-
-    // Remove any other XML-like tags that might appear
-    text = text.replace(/<[^>]+>/g, '');
-
-    // Clean up extra whitespace
-    text = text.replace(/\s+/g, ' ').trim();
-
-    return text;
-}
-
 function parseDefinition(data, word) {
-    // Map the new API response format to the expected format
-    // API returns: { word, partOfSpeech, definition, example }
-    // We need: { word, partOfSpeech, text, exampleUses }
 
-    const definitionText = data.definition ? cleanDefinitionText(data.definition) : null;
+    const definitionText = data.definition ? data.definition : null;
 
     if (!definitionText || !definitionText.trim()) {
         throw new Error("No definition available");
     }
 
-    // Convert single example string to array format expected by UI
     const exampleUses = data.example && data.example.trim()
         ? [data.example.trim()]
         : [];
