@@ -326,6 +326,133 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// Function to extract context (20 words before and after the selected word)
+function extractContext(selection, word) {
+    try {
+        if (!selection || selection.rangeCount === 0) {
+            return null;
+        }
+
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+
+        // Get the text node that contains the selection
+        let textNode = container.nodeType === Node.TEXT_NODE
+            ? container
+            : range.startContainer.nodeType === Node.TEXT_NODE
+                ? range.startContainer
+                : container.textContent ? container : null;
+
+        if (!textNode) {
+            // Try to find text content in parent elements
+            let element = container.nodeType === Node.ELEMENT_NODE
+                ? container
+                : container.parentElement;
+
+            while (element && !element.textContent) {
+                element = element.parentElement;
+            }
+
+            if (element) {
+                const fullText = element.textContent || '';
+                const selectedText = selection.toString().trim();
+                const wordIndex = fullText.indexOf(selectedText);
+
+                if (wordIndex !== -1) {
+                    return extractWordsFromText(fullText, wordIndex, selectedText.length, word);
+                }
+            }
+            return null;
+        }
+
+        // Get all text from the same text node or parent element
+        const parentElement = textNode.nodeType === Node.TEXT_NODE
+            ? textNode.parentElement
+            : textNode;
+
+        if (!parentElement) {
+            return null;
+        }
+
+        const fullText = parentElement.textContent || '';
+        const selectedText = selection.toString().trim();
+        const wordIndex = fullText.indexOf(selectedText);
+
+        if (wordIndex === -1) {
+            // If exact match not found, try to find the word in context
+            const words = fullText.split(/\s+/);
+            const wordLower = word.toLowerCase();
+            for (let i = 0; i < words.length; i++) {
+                if (words[i].toLowerCase().replace(/[^\w]/g, '') === wordLower) {
+                    const beforeStart = Math.max(0, i - 20);
+                    const afterEnd = Math.min(words.length, i + 21); // +1 to include the word itself
+                    const contextWords = words.slice(beforeStart, afterEnd);
+                    return contextWords.join(' ');
+                }
+            }
+            return null;
+        }
+
+        return extractWordsFromText(fullText, wordIndex, selectedText.length, word);
+    } catch (error) {
+        console.error("Error extracting context:", error);
+        return null;
+    }
+}
+
+// Helper function to extract words from text around a given position
+function extractWordsFromText(text, startIndex, length, word) {
+    // Split text into words while preserving spaces
+    const words = [];
+    const wordRegex = /\S+/g;
+    let match;
+    let wordPositions = [];
+
+    while ((match = wordRegex.exec(text)) !== null) {
+        wordPositions.push({
+            word: match[0],
+            start: match.index,
+            end: match.index + match[0].length
+        });
+    }
+
+    // Find the word that contains or is near the selection
+    let selectedWordIndex = -1;
+    const selectionEnd = startIndex + length;
+
+    for (let i = 0; i < wordPositions.length; i++) {
+        const pos = wordPositions[i];
+        // Check if selection overlaps with this word
+        if (startIndex <= pos.end && selectionEnd >= pos.start) {
+            selectedWordIndex = i;
+            break;
+        }
+    }
+
+    // If exact match not found, try to find by word content
+    if (selectedWordIndex === -1) {
+        const wordClean = word.toLowerCase().replace(/[^\w]/g, '');
+        for (let i = 0; i < wordPositions.length; i++) {
+            const wordClean2 = wordPositions[i].word.toLowerCase().replace(/[^\w]/g, '');
+            if (wordClean === wordClean2) {
+                selectedWordIndex = i;
+                break;
+            }
+        }
+    }
+
+    if (selectedWordIndex === -1) {
+        return null;
+    }
+
+    // Extract 20 words before and after (including the selected word)
+    const beforeStart = Math.max(0, selectedWordIndex - 20);
+    const afterEnd = Math.min(wordPositions.length, selectedWordIndex + 21);
+    const contextWords = wordPositions.slice(beforeStart, afterEnd).map(p => p.word);
+
+    return contextWords.join(' ');
+}
+
 // Double click handler
 document.addEventListener("dblclick", () => {
     const selection = window.getSelection();
@@ -333,12 +460,15 @@ document.addEventListener("dblclick", () => {
 
     if (!word) return;
 
+    // Extract context
+    const context = extractContext(selection, word);
+
     // Show loading state
     showLoadingPopup(selection);
 
-    // Send message to background script
+    // Send message to background script with context
     chrome.runtime.sendMessage(
-        { action: "lookupWord", word },
+        { action: "lookupWord", word, context },
         (response) => {
             removeExistingPopup();
 
@@ -699,9 +829,10 @@ function renderFrequencyChart(word, frequencyData, range) {
                 e.stopPropagation();
                 if (currentWord && currentSelection) {
                     // Reload definition view
+                    const context = extractContext(currentSelection, currentWord);
                     showLoadingPopup(currentSelection);
                     chrome.runtime.sendMessage(
-                        { action: "lookupWord", word: currentWord },
+                        { action: "lookupWord", word: currentWord, context },
                         (response) => {
                             removeExistingPopup();
                             if (response && response.success) {

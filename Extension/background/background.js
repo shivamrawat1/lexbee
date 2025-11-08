@@ -1,7 +1,7 @@
 // Background service worker for LexBee extension
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "lookupWord") {
-        lookupWord(message.word)
+        lookupWord(message.word, message.context)
             .then((data) => {
                 sendResponse({ success: true, data });
             })
@@ -31,7 +31,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-async function lookupWord(word) {
+async function lookupWord(word, context = null) {
     try {
         const cleanWord = word.trim().toLowerCase();
 
@@ -39,7 +39,12 @@ async function lookupWord(word) {
             throw new Error("Word cannot be empty");
         }
 
-        const apiUrl = `https://lexbee-production.up.railway.app/definition/${cleanWord}`;
+        // Build API URL with context as query parameter if provided
+        let apiUrl = `https://lexbee-production.up.railway.app/definition/${encodeURIComponent(cleanWord)}`;
+        if (context) {
+            // URL encode the context to handle special characters and spaces
+            apiUrl += `?context=${encodeURIComponent(context)}`;
+        }
 
         const response = await fetch(apiUrl);
 
