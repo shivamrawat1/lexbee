@@ -14,11 +14,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
         return true; // Keep the message channel open for async response
     }
+
+    if (message.action === "lookupFrequency") {
+        lookupFrequency(message.word)
+            .then((data) => {
+                sendResponse({ success: true, data });
+            })
+            .catch((error) => {
+                console.error("Error looking up frequency:", error);
+                sendResponse({
+                    success: false,
+                    error: error.message || "Failed to fetch frequency"
+                });
+            });
+        return true; // Keep the message channel open for async response
+    }
 });
 
 async function lookupWord(word) {
     try {
-        // Clean the word (remove extra spaces, convert to lowercase)
         const cleanWord = word.trim().toLowerCase();
 
         if (!cleanWord) {
@@ -35,38 +49,35 @@ async function lookupWord(word) {
 
         const data = await response.json();
 
-        // Validate response is an object
-        if (!data || typeof data !== 'object') {
-            throw new Error("Invalid API response format");
-        }
-
-        // Parse the response to match the expected format
-        const definition = parseDefinition(data, cleanWord);
-
-        return definition;
+        return data;
     } catch (error) {
         console.error("Error in lookupWord:", error);
         throw error;
     }
 }
 
-function parseDefinition(data, word) {
+async function lookupFrequency(word) {
+    try {
+        const cleanWord = word.trim().toLowerCase();
 
-    const definitionText = data.definition ? data.definition : null;
+        if (!cleanWord) {
+            throw new Error("Word cannot be empty");
+        }
 
-    if (!definitionText || !definitionText.trim()) {
-        throw new Error("No definition available");
+        const apiUrl = `https://lexbee-production.up.railway.app/frequency/${cleanWord}`;
+
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        return data;
+    } catch (error) {
+        console.error("Error in lookupFrequency:", error);
+        throw error;
     }
-
-    const exampleUses = data.example && data.example.trim()
-        ? [data.example.trim()]
-        : [];
-
-    return {
-        word: data.word || word,
-        partOfSpeech: data.partOfSpeech || "unknown",
-        text: definitionText,
-        exampleUses: exampleUses
-    };
 }
 
