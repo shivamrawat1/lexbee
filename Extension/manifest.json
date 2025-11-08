@@ -12,9 +12,7 @@
     "action": {
         "default_popup": "/default_popup/instructions.html"
     },
-    "permissions": [
-        "activeTab"
-    ],
+    "permissions": [],
     "host_permissions": [
         "https://meanings.onrender.com/*",
         "https://lexbee-production.up.railway.app/*"
