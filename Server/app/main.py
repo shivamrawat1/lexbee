@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import wordnik, definition, frequency, pronunciation
+from .routers import definition, frequency, pronunciation
 
 app = FastAPI()
 
@@ -19,7 +19,6 @@ async def health_check():
     return {"message": "OK"}
 
 
-app.include_router(wordnik.router)
 app.include_router(definition.router)
 app.include_router(frequency.router)
 app.include_router(pronunciation.router)

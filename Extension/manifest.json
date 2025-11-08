@@ -14,7 +14,6 @@
     },
     "permissions": [],
     "host_permissions": [
-        "https://meanings.onrender.com/*",
         "https://lexbee-production.up.railway.app/*"
     ],
     "background": {
