@@ -11,7 +11,7 @@ client = OpenAI(
 def extract_definition(word: str) -> DefinitionResponse:
     response = client.responses.parse(
         model="openai/gpt-oss-20b",
-        temperature=1.0,
+        temperature=0.0,
         input=[
             {
                 "role": "system",
@@ -23,7 +23,3 @@ def extract_definition(word: str) -> DefinitionResponse:
     )
 
     return response.output_parsed
-
-
-if __name__ == "__main__":
-    print(extract_definition("hello"))
