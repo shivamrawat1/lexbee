@@ -326,7 +326,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Function to extract context (20 words before and after the selected word)
+// Function to extract context (10 words before and after the selected word)
 function extractContext(selection, word) {
     try {
         if (!selection || selection.rangeCount === 0) {
@@ -384,8 +384,8 @@ function extractContext(selection, word) {
             const wordLower = word.toLowerCase();
             for (let i = 0; i < words.length; i++) {
                 if (words[i].toLowerCase().replace(/[^\w]/g, '') === wordLower) {
-                    const beforeStart = Math.max(0, i - 20);
-                    const afterEnd = Math.min(words.length, i + 21); // +1 to include the word itself
+                    const beforeStart = Math.max(0, i - 10);
+                    const afterEnd = Math.min(words.length, i + 11); // +1 to include the word itself
                     const contextWords = words.slice(beforeStart, afterEnd);
                     return contextWords.join(' ');
                 }
@@ -445,9 +445,9 @@ function extractWordsFromText(text, startIndex, length, word) {
         return null;
     }
 
-    // Extract 20 words before and after (including the selected word)
-    const beforeStart = Math.max(0, selectedWordIndex - 20);
-    const afterEnd = Math.min(wordPositions.length, selectedWordIndex + 21);
+    // Extract 10 words before and after (including the selected word)
+    const beforeStart = Math.max(0, selectedWordIndex - 10);
+    const afterEnd = Math.min(wordPositions.length, selectedWordIndex + 11);
     const contextWords = wordPositions.slice(beforeStart, afterEnd).map(p => p.word);
 
     return contextWords.join(' ');
