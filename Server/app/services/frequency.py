@@ -5,7 +5,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 
-async def get_frequency(
+async def extract_frequency(
     word: str,
     useCanonical: str = "false",
     startYear: Optional[int] = None,
